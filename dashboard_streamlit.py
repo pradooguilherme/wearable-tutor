@@ -18,9 +18,6 @@ except Exception:  # pragma: no cover - optional dependency
     st_autorefresh = None
 
 
-DB_PATH = Path(__file__).resolve().with_name("foco_tracker.db")
-
-
 def carregar_env_local(caminho_env: Path) -> None:
     if not caminho_env.exists():
         return
@@ -215,7 +212,6 @@ col2.metric("Sessões concluídas com sucesso", sessoes_sucesso)
 col3.metric("Sessões interrompidas", sessoes_interrompidas)
 
 st.divider()
-
 st.subheader("Estabilidade do sinal")
 
 if sessoes_df.empty:
@@ -232,35 +228,29 @@ else:
         st.info("Não foi possível localizar a sessão selecionada.")
     else:
         sessao_id = int(sessao_escolhida_df.iloc[0]["id"])
-        sessao_logs = logs_df.copy()
-        if not sessao_logs.empty:
-            sessao_logs = preparar_logs_exibicao(sessao_logs)
+        sessao_logs = preparar_logs_exibicao(logs_df)
 
         if sessao_logs.empty:
             st.info("Não há amostras de RSSI registradas para esta sessão.")
         else:
-            sessao_logs = sessao_logs.reset_index(drop=True)
-            if len(sessoes_ordenadas) == 1:
+            inicio_sessao = pd.to_datetime(sessao_escolhida_df.iloc[0]["inicio"], errors="coerce")
+            fim_sessao = pd.to_datetime(sessao_escolhida_df.iloc[0]["fim"], errors="coerce")
+
+            if pd.isna(inicio_sessao) or pd.isna(fim_sessao):
                 sessao_logs_filtrados = sessao_logs
             else:
-                inicio_sessao = pd.to_datetime(sessao_escolhida_df.iloc[0]["inicio"], errors="coerce")
-                fim_sessao = pd.to_datetime(sessao_escolhida_df.iloc[0]["fim"], errors="coerce")
-                if pd.isna(inicio_sessao) or pd.isna(fim_sessao):
-                    sessao_logs_filtrados = sessao_logs
-                else:
-                    sessao_logs_filtrados = sessao_logs[
-                        (sessao_logs["timestamp"] >= inicio_sessao) & (sessao_logs["timestamp"] <= fim_sessao)
-                    ]
+                sessao_logs_filtrados = sessao_logs[
+                    (sessao_logs["timestamp"] >= inicio_sessao) & (sessao_logs["timestamp"] <= fim_sessao)
+                ]
 
             if sessao_logs_filtrados.empty:
                 st.info("A sessão selecionada ainda não possui logs no intervalo correspondente.")
             else:
                 grafico_df = preparar_logs_grafico(sessao_logs_filtrados)
-
                 pontos_proximidade = grafico_df[grafico_df["proximidade_extrema"] == 1]
 
                 if alt is not None:
-                    base = alt.Chart(grafico_df.reset_index()).encode(
+                    base = alt.Chart(grafico_df).encode(
                         x=alt.X("minuto_sessao:Q", title="Minutos"),
                         y=alt.Y("rssi:Q", title="RSSI (dBm)"),
                         tooltip=[
@@ -272,7 +262,7 @@ else:
                     )
                     linha = base.mark_line(color="#1f77b4", strokeWidth=2)
                     pontos = (
-                        alt.Chart(pontos_proximidade.reset_index())
+                        alt.Chart(pontos_proximidade)
                         .mark_circle(size=110, color="#d62728")
                         .encode(x="minuto_sessao:Q", y="rssi:Q")
                     )
@@ -281,7 +271,7 @@ else:
                     st.line_chart(grafico_df.set_index("minuto_sessao")["rssi"], height=300)
                     if not pontos_proximidade.empty:
                         st.write("Momentos de proximidade extrema")
-                        st.scatter_chart(pontos_proximidade.set_index("minuto_sessao")[["rssi"]], height=180)
+                        st.scatter_chart(pontos_proximidade.set_index("minuto_sessao")["rssi"], height=180)
 
                 st.caption(f"Sessão exibida: #{sessao_id}")
 
