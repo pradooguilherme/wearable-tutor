@@ -164,6 +164,19 @@ def preparar_logs_exibicao(df: pd.DataFrame) -> pd.DataFrame:
     return exibicao
 
 
+def preparar_logs_grafico(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+
+    exibicao = df.copy()
+    exibicao = exibicao.sort_values(["timestamp", "id"]).reset_index(drop=True)
+    inicio_sessao = exibicao["timestamp"].iloc[0]
+    exibicao["minuto_sessao"] = (exibicao["timestamp"] - inicio_sessao).dt.total_seconds() / 60.0
+    exibicao["minuto_sessao"] = exibicao["minuto_sessao"].round(2)
+    exibicao["hora_formatada"] = exibicao["timestamp"].dt.strftime("%H:%M:%S")
+    return exibicao
+
+
 st.title("Dashboard de Produtividade")
 st.caption("Leitura local do SQLite com atualização leve para acompanhar o monitor principal em segundo plano.")
 
@@ -242,17 +255,17 @@ else:
             if sessao_logs_filtrados.empty:
                 st.info("A sessão selecionada ainda não possui logs no intervalo correspondente.")
             else:
-                grafico_df = sessao_logs_filtrados.copy()
-                grafico_df = grafico_df.set_index("timestamp")
+                grafico_df = preparar_logs_grafico(sessao_logs_filtrados)
 
                 pontos_proximidade = grafico_df[grafico_df["proximidade_extrema"] == 1]
 
                 if alt is not None:
                     base = alt.Chart(grafico_df.reset_index()).encode(
-                        x=alt.X("timestamp:T", title="Tempo"),
+                        x=alt.X("minuto_sessao:Q", title="Minutos"),
                         y=alt.Y("rssi:Q", title="RSSI (dBm)"),
                         tooltip=[
-                            alt.Tooltip("timestamp:T", title="Horário"),
+                            alt.Tooltip("hora_formatada:N", title="Horário"),
+                            alt.Tooltip("minuto_sessao:Q", title="Minuto da sessão"),
                             alt.Tooltip("rssi:Q", title="RSSI"),
                             alt.Tooltip("proximidade_extrema:N", title="Proximidade extrema"),
                         ],
@@ -261,14 +274,14 @@ else:
                     pontos = (
                         alt.Chart(pontos_proximidade.reset_index())
                         .mark_circle(size=110, color="#d62728")
-                        .encode(x="timestamp:T", y="rssi:Q")
+                        .encode(x="minuto_sessao:Q", y="rssi:Q")
                     )
                     st.altair_chart((linha + pontos).properties(height=320), use_container_width=True)
                 else:
-                    st.line_chart(grafico_df["rssi"], height=300)
+                    st.line_chart(grafico_df.set_index("minuto_sessao")["rssi"], height=300)
                     if not pontos_proximidade.empty:
                         st.write("Momentos de proximidade extrema")
-                        st.scatter_chart(pontos_proximidade[["rssi"]], height=180)
+                        st.scatter_chart(pontos_proximidade.set_index("minuto_sessao")[["rssi"]], height=180)
 
                 st.caption(f"Sessão exibida: #{sessao_id}")
 
